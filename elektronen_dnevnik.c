@@ -161,6 +161,35 @@ int main(void) {
 			}
 			printf("Average class grade is: %.2f\n", sum / numStudents);
 		}
+		else if(strcmp(command, "remove") == 0) {
+			int index;
+			printf("\nEnter the index of the student you would like to remove: ");
+			scanf("%d", &index);
+			getchar();
+
+			Student student;
+			studentFile = fopen(studentFileName, "r+b");
+			FILE * copyTo = fopen("classes/temp.neshto", "wb");	
+			
+			while(fread(&student, sizeof(Student), 1, studentFile)) {
+				if((ftell(studentFile) / sizeof(Student)) == index + 1) {
+					continue;
+				}
+				fwrite(&student, sizeof(Student), 1, copyTo);
+			}
+			fclose(studentFile);
+			int rm = remove(studentFileName);
+
+			if(rm) {
+				printf("Error with deleting file!");
+				scanf("%s");
+			}
+			else {
+				fclose(copyTo);
+				rename("classes/temp.neshto", studentFileName);
+			}
+			
+		}
 	}
 }
 
@@ -175,7 +204,6 @@ Options createOptions() {
 	options.studentNum = 0;
 	return options;
 }
-
 
 
 void addGrade(Student *student, int *grade) {
