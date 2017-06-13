@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <conio.h>
+#include <unistd.h>
 
 typedef struct {
 	char name[50];
@@ -22,39 +23,43 @@ typedef struct {
 
 } Student;
 
-typedef struct {
-	int studentNum;
-} Options;
 
 Student createStudent();
 Student * getStudentArray();
-Options createOptions();
-Options getOptions();
 void addGrade(Student *student, int *grade);
 void printStudentInfo(Student student);
 float getAverageGrade(int grades[], int size);
 void changeWorkingStudentDatabase(char studentFileName[]);
+int getStructFileLength(char fileName[], void * structAddress, int structSize);
+int getStructFileByteLength(char fileName[], void * structAddress, int structSize);
+void appendStruct(char fileName[], void * structAddress, int structSize);
+void addStruct(char fileName[], int index, void * structAddress, int structSize);
+void removeFileIndexByNewFile(char fileName[], int index, void * structAddress, int structSize);
 void clear();
+
+// Created by Kraso
 
 int main(void) {
 	FILE *studentFile;
 	
 
 	char studentFileName[30];
+	clear();
 	// Get the file that the user wants to work with and create it if it doesnt exist.
 	changeWorkingStudentDatabase(studentFileName);
+	clear();
 	
 	
 	while(1) {
 		char command[20];
 		
-
 		printf("What would you like to do?\n");
 		printf("Type 'read' to display the file information\n");
 		printf("Type 'add' to add a student\n");
-		printf("Type 'change' to change current active student database.\n");
 		printf("Type 'edit' to edit a student\n");
+		printf("Type 'change' to change current active student database.\n");
 		printf("Type 'average' to get the average of all the students\n");
+		printf("Type 'remove' to remove a student by index\n");
 		printf("Type 'exit' to exit the program.\n");
 
 		gets(command);
@@ -73,24 +78,17 @@ int main(void) {
 		}
 		else if(strcmp(command, "add") == 0) {
 			// Get number of students;
-			int studentNum = 0;
-			Student student;
-			studentFile = fopen(studentFileName, "rb");
-			while((fread(&student, sizeof(Student), 1, studentFile))) {
-				studentNum++;
-			}
-			fclose(studentFile);
-
-
-			studentFile = fopen(studentFileName, "ab");
+			Student temp;
+			int studentNum = getStructFileLength(studentFileName, &temp, sizeof(Student));
 
 			while(1) {
 				Student student = createStudent();
 				student.num = studentNum;
-				printf("Enter name(Type 'NULL' to exit): ");
+				studentNum++;
+				printf("Enter name(Type 'END' to exit): ");
 				gets(student.name);
 
-				if(strcmp(student.name, "NULL") == 0) {
+				if(strcmp(student.name, "END") == 0) {
 					break;
 				}
 				
@@ -105,11 +103,12 @@ int main(void) {
 					addGrade(&student, &grade);
 				}
 				printStudentInfo(student);
-				fwrite(&student, sizeof(Student), 1, studentFile);
-				studentNum++;
 				
+
+				appendStruct(studentFileName, &student, sizeof(Student));
 			}
-			fclose(studentFile);
+
+			
 		}
 		else if(strcmp(command, "exit") == 0) {
 			break;
@@ -124,8 +123,6 @@ int main(void) {
 			getchar();
 
 
-			studentFile = fopen(studentFileName, "r+b");
-			fseek(studentFile, index, SEEK_SET); // Set the file's stream position to the index.
 			Student student = createStudent();
 			student.num = index;
 			printf("Enter name(Type 'END' to exit): ");
@@ -146,9 +143,7 @@ int main(void) {
 				addGrade(&student, &grade);
 			}
 			printStudentInfo(student);
-			fwrite(&student, sizeof(Student), 1, studentFile);
-
-			fclose(studentFile);
+			addStruct(studentFileName, index, &student, sizeof(Student));
 		}
 		else if(strcmp(command, "average") == 0) {
 			studentFile = fopen(studentFileName, "rb");
@@ -168,27 +163,7 @@ int main(void) {
 			getchar();
 
 			Student student;
-			studentFile = fopen(studentFileName, "r+b");
-			FILE * copyTo = fopen("classes/temp.neshto", "wb");	
-			
-			while(fread(&student, sizeof(Student), 1, studentFile)) {
-				if((ftell(studentFile) / sizeof(Student)) == index + 1) {
-					continue;
-				}
-				fwrite(&student, sizeof(Student), 1, copyTo);
-			}
-			fclose(studentFile);
-			int rm = remove(studentFileName);
-
-			if(rm) {
-				printf("Error with deleting file!");
-				scanf("%s");
-			}
-			else {
-				fclose(copyTo);
-				rename("classes/temp.neshto", studentFileName);
-			}
-			
+			removeFileIndexByNewFile(studentFileName, index, &student, sizeof(Student));
 		}
 	}
 }
@@ -197,12 +172,6 @@ Student createStudent() {
 	Student student;
 	student.currentGradeIndex = 0;
 	return student;
-}
-
-Options createOptions() {
-	Options options;
-	options.studentNum = 0;
-	return options;
 }
 
 
@@ -242,7 +211,6 @@ float getAverageGrade(int grades[], int size) {
 }
 
 void changeWorkingStudentDatabase(char studentFileName[]) {
-	FILE *optionsFile;
 	FILE *studentFile;
 	DIR *d;
 	struct dirent *dir;
@@ -263,6 +231,59 @@ void changeWorkingStudentDatabase(char studentFileName[]) {
 	studentFile = fopen(studentFileName, "ab");
 	fclose(studentFile);
 }
+
+int getStructFileLength(char fileName[], void * structAddress, int structSize) {
+	FILE * file = fopen(fileName, "rb");
+	int length = 0;
+	while(fread(structAddress, structSize, 1, file)) {
+		length++;
+	}
+	fclose(file);
+	return length;
+}
+
+
+int getStructFileByteLength(char fileName[], void * structAddress, int structSize) {
+	return getStructFileLength(fileName, structAddress, structSize) * structSize;
+}
+
+
+void appendStruct(char fileName[], void * structAddress, int structSize) {
+	FILE * file = fopen(fileName, "ab");
+	fwrite(structAddress, structSize, 1, file);
+	fclose(file);
+}
+
+void addStruct(char fileName[], int index, void * structAddress, int structSize) {
+	FILE * file = fopen(fileName, "r+b");
+	fseek(file, index * structSize, SEEK_SET);
+	fwrite(structAddress, structSize, 1, file);
+	fclose(file);
+}
+
+
+void removeFileIndexByNewFile(char fileName[], int index, void * structAddress, int structSize) {
+	FILE * file = fopen(fileName, "r+b");
+	FILE * copyTo = fopen("temp.neshto", "wb");
+	
+	while(fread(structAddress, structSize, 1, file)) {
+		if((ftell(file) / structSize) == index + 1) {
+			continue;
+		}
+		fwrite(structAddress, structSize, 1, copyTo);
+	}
+	fclose(file);
+	int rm = remove(fileName);
+	fclose(copyTo);
+	if(rm) {
+		printf("Error with deleting file! Press anything to continue.");
+		getch();
+	}
+	else {
+		rename("temp.neshto", fileName);
+	}
+}
+
 
 void clear() {
 	system("cls");
